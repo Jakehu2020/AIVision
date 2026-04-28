@@ -2,31 +2,38 @@
 #include "pros/ai_vision.h"
 #include <cmath>
 
-class AIVision {
+class AIVisionLocalizer {
     public:
         struct Pose {
             float x = 0.0;
             float y = 0.0;
         };
-        pros::AIVision sensor;
         float tag_width;
 
+        AIVisionLocalizer(pros::AIVision* _VisionSensor, float tag_width);
+        Pose project(const pros::aivision_object_tag_s_t& tag);
+        std::vector<AIVisionLocalizer::Pose> getPositions(int tag); // This may need to be moved to private
+    private:
         // AI Vision Sensor constants. These were derived from:
         // https://kb.vex.com/hc/en-us/articles/24173352365972-Comparing-the-AI-Vision-Sensor-to-the-V5-Vision-Sensor
-        const int horizontal_fov_deg = 74;
-        const int vertical_fov_deg = 63;
-        const int diagonal_fov_deg = 87;
-        const int resolution_x = 320;
-        const int resolution_y = 240;
+        inline static constexpr int horizontal_fov_deg = 74;
+        inline static constexpr int vertical_fov_deg = 63;
+        inline static constexpr int diagonal_fov_deg = 87;
+        inline static constexpr int resolution_x = 320;
+        inline static constexpr int resolution_y = 240;
 
-        AIVision(int port, float tag_width);
-        Pose project(pros::aivision_object_tag_s_t& tag);
-        std::vector<AIVision::Pose> getPositions(int tag);
+        //Constants created for projection
+        inline static const float focal_length = (resolution_x / 2) / tan(horizontal_fov_deg / 2);
+        inline static const float half_res_x = (resolution_x / 2);
+        
+        //Main AI Sensor
+        pros::AIVision* VisionSensor;
 };
 
-AIVision::AIVision(int port, float tag_width)
-     : sensor(pros::AIVision(port)), tag_width(tag_width) {
-    sensor.enable_detection_types(pros::AivisionModeType::tags);
+AIVisionLocalizer::AIVisionLocalizer(pros::AIVision* _VisionSensor, float tag_width)
+     : VisionSensor(_VisionSensor), tag_width(tag_width) {
+    VisionSensor->disable_detection_types(pros::AivisionModeType::all); // disable 
+    VisionSensor->enable_detection_types(pros::AivisionModeType::tags);
 }
 
 /*
@@ -45,10 +52,10 @@ Mathematics for April Tag usage (based on 4 corners):
 float side(float x1, float y1, float x2, float y2) {
     float dX = x2 - x1;
     float dY = y2 - y1;
-    return std::sqrt(dX * dX + dY * dY);
+    return std::sqrtf(dX * dX + dY * dY);
 }
 
-AIVision::Pose AIVision::project(pros::aivision_object_tag_s_t& tag) {
+AIVisionLocalizer::Pose AIVisionLocalizer::project(const pros::aivision_object_tag_s_t& tag) {
     Pose testpose;
     const float average_x = (tag.x0 + tag.x1 + tag.x2 + tag.x3) / 4.0;
     const float average_side = (
@@ -58,21 +65,21 @@ AIVision::Pose AIVision::project(pros::aivision_object_tag_s_t& tag) {
         side(tag.x3, tag.y3, tag.x0, tag.y0)
     ) / 4.0;
 
-    double focal_length = (resolution_x / 2) / tan(horizontal_fov_deg / 2);
+    
     
     testpose.y = (tag_width * focal_length) / average_side;
-    testpose.x = (average_x - resolution_x/2) * testpose.y / focal_length;
+    testpose.x = (average_x - half_res_x) * testpose.y / focal_length;
 
     return testpose;//math to project tag location to coordinates, do later
 }
 
-std::vector<AIVision::Pose> AIVision::getPositions(const int tag) {
+std::vector<AIVisionLocalizer::Pose> AIVisionLocalizer::getPositions(const int tag) {
     std::vector<Pose> poses;
-    const int totalcount = sensor.get_object_count();
+    const int totalcount = VisionSensor->get_object_count();
     if(totalcount < 1) return poses;
 
     for (int i = 0; i < totalcount; i++) {
-        pros::AIVision::Object object = sensor.get_object(i);
+        pros::AIVision::Object object = VisionSensor->get_object(i);
         if (object.id != tag || pros::AIVision::is_type(object, pros::AivisionDetectType::tag)) continue;
         poses.push_back(project(object.object.tag));
     }
