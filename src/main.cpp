@@ -1,9 +1,7 @@
 #include "main.h"
-
-
-pros::AIVision aiview(2);
-
-
+#include "aivision.hpp"
+pros::AIVision AISensing(5);
+AIVisionLocalizer test = AIVisionLocalizer(&AISensing, 3);
 /**
  * A callback function for LLEMU's center button.
  *
@@ -78,11 +76,11 @@ void autonomous() {}
  * task, not resume it from where it left off.
  */
 void opcontrol() {
-	aiview.disable_detection_types(pros::AivisionModeType::all);
-	aiview.enable_detection_types(pros::AivisionModeType::tags); // only detect april tags
+	AISensing.disable_detection_types(pros::AivisionModeType::all);
+	AISensing.enable_detection_types(pros::AivisionModeType::tags); // only detect april tags
 	std::vector<pros::AIVision::Object> objectVector(10); //empty vector with 10 blank ai objects
-	std::vector<pros::AIVision::Object> test = aiview.get_all_objects(); // set a vector to ai objects
-	pros::AIVision::Object imStupid = aiview.get_object(0);
+	std::vector<pros::AIVision::Object> test = AISensing.get_all_objects(); // set a vector to ai objects
+	pros::AIVision::Object imStupid = AISensing.get_object(0);
 	auto ex_zero = imStupid.object.tag.x0;
 	
 	pros::Controller master(pros::E_CONTROLLER_MASTER);
