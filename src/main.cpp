@@ -1,7 +1,7 @@
 #include "main.h"
 #include "aivision.hpp"
 pros::AIVision AISensing(5);
-AIVisionLocalizer test = AIVisionLocalizer(&AISensing, 3);
+AIVisionLocalizer test = AIVisionLocalizer(&AISensing);
 /**
  * A callback function for LLEMU's center button.
  *
