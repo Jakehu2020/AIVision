@@ -20,7 +20,7 @@ class AIVisionLocalizer {
         std::vector<AIVisionLocalizer::Pose> getPositionsGlobal(const int tag, std::array<float, 3> robot_pose); // Pose{x, y, r, theta}
         std::optional<AIVisionLocalizer::Pose> getNearestGlobal(const int tag, std::array<float, 3> robot_pose); // Pose{x, y, r, theta}
     private:
-        float AIVisionLocalizer::side(float x1, float y1, float x2, float y2); // no need for this to be public -ZK
+        
 
         // AI Vision Sensor constants. These were derived from:
         // https://kb.vex.com/hc/en-us/articles/24173352365972-Comparing-the-AI-Vision-Sensor-to-the-V5-Vision-Sensor
@@ -39,6 +39,8 @@ class AIVisionLocalizer {
         // Main AI Sensor
         pros::AIVision& VisionSensor;
 
+        //functions
+        float side(float x1, float y1, float x2, float y2); // no need for this to be public -ZK
         Pose project(const pros::aivision_object_tag_s_t& tag);
 };
 
