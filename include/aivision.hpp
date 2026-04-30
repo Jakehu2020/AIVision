@@ -9,11 +9,10 @@ class AIVisionLocalizer {
             float r = 0.0;
             float theta = 0.0;
         };
-        float tag_width = 1.2606; // This was derived from pixel-calculations. This value should be changed according to the real size.
-        float tolerance_percent = 0.9; // Detections below 90% are disregarded, as recommended from Jhon @ ATUM.
+        float tag_width = 1.2606; // turns out the pixel derivation was correct
+        // float tolerance_percent = 0.9; // Detections below 90% are disregarded, as recommended from Jhon @ ATUM.
 
-        AIVisionLocalizer(pros::AIVision* _VisionSensor, float tolerance=0.9);
-        Pose project(const pros::aivision_object_tag_s_t& tag);
+        AIVisionLocalizer(pros::AIVision& _VisionSensor/*, float tolerance=0.9*/);
         
         std::vector<AIVisionLocalizer::Pose> getPositionsRelative(const int tag); // Pose{dx, dy, r, theta}
         std::optional<AIVisionLocalizer::Pose> getNearestRelative(const int tag); // Pose{dx, dy, r, theta}
@@ -29,18 +28,20 @@ class AIVisionLocalizer {
         inline static constexpr float resolution_x = 320;
         inline static constexpr float resolution_y = 240;
 
-        //Constants created for projection
-        inline static const float focal_length = (resolution_x / 2) / tan(horizontal_fov_deg / 2);
+        // Constants created for projection
+        inline static const float focal_length = (resolution_x / 2) / tan(horizontal_fov_deg * M_PI / 180.0f / 2.0f);
         inline static const float half_res_x = (resolution_x / 2);
         
-        //Main AI Sensor
-        pros::AIVision* VisionSensor;
+        // Main AI Sensor
+        pros::AIVision& VisionSensor;
+
+        Pose project(const pros::aivision_object_tag_s_t& tag);
 };
 
-AIVisionLocalizer::AIVisionLocalizer(pros::AIVision* _VisionSensor, float tolerance)
-     : VisionSensor(_VisionSensor), tolerance_percent(tolerance) {
-    VisionSensor->disable_detection_types(pros::AivisionModeType::all); // disable 
-    VisionSensor->enable_detection_types(pros::AivisionModeType::tags);
+AIVisionLocalizer::AIVisionLocalizer(pros::AIVision& _VisionSensor/*, float tolerance=0.9*/)
+     : VisionSensor(_VisionSensor) {
+    VisionSensor.disable_detection_types(pros::AivisionModeType::all); // disable 
+    VisionSensor.enable_detection_types(pros::AivisionModeType::tags);
 }
 
 /*
@@ -55,11 +56,12 @@ Mathematics for April Tag usage (based on 4 corners):
     x = ( centroid_x - image_cx ) * y / focal_length
 
 */
-
-float side(float x1, float y1, float x2, float y2) {
-    float dX = x2 - x1;
-    float dY = y2 - y1;
-    return std::sqrtf(dX * dX + dY * dY);
+namespace{
+    float side(float x1, float y1, float x2, float y2) {
+        float dX = x2 - x1;
+        float dY = y2 - y1;
+        return std::sqrtf(dX * dX + dY * dY);
+    }
 }
 
 AIVisionLocalizer::Pose AIVisionLocalizer::project(const pros::aivision_object_tag_s_t& tag) {
@@ -75,19 +77,19 @@ AIVisionLocalizer::Pose AIVisionLocalizer::project(const pros::aivision_object_t
     testpose.y = (tag_width * focal_length) / average_side;
     testpose.x = (average_x - half_res_x) * testpose.y / focal_length;
     testpose.r = std::sqrt(testpose.x * testpose.x + testpose.y * testpose.y);
-    testpose.theta = std::atan2(testpose.y, testpose.x);
+    testpose.theta = std::atan2(testpose.x, testpose.y);
 
-    return testpose;//math to project tag location to coordinates, do later
+    return testpose;
 }
 
 std::vector<AIVisionLocalizer::Pose> AIVisionLocalizer::getPositionsRelative(const int tag) {
     std::vector<Pose> poses;
-    const int totalcount = VisionSensor->get_object_count();
+    const int totalcount = VisionSensor.get_object_count();
     if(totalcount < 1) return poses;
 
     for (int i = 0; i < totalcount; i++) {
-        pros::AIVision::Object object = VisionSensor->get_object(i);
-        if (object.id != tag || object.object.element.score < tolerance_percent || !pros::AIVision::is_type(object, pros::AivisionDetectType::tag)) continue;
+        pros::AIVision::Object object = VisionSensor.get_object(i);
+        if (object.id != tag || !pros::AIVision::is_type(object, pros::AivisionDetectType::tag)) continue;
         poses.push_back(project(object.object.tag));
     }
     return poses;
@@ -102,13 +104,13 @@ std::optional<AIVisionLocalizer::Pose> AIVisionLocalizer::getNearestRelative(con
     std::optional<pros::aivision_object_tag_s_t> best = std::nullopt;
     double best_area = 0;
  
-    const int count = VisionSensor->get_object_count();
+    const int count = VisionSensor.get_object_count();
     if (count <= 0) return std::nullopt;
  
     for (int i = 0; i < count; i++) {
-        pros::AIVision::Object object = VisionSensor->get_object(static_cast<uint32_t>(i));
+        pros::AIVision::Object object = VisionSensor.get_object(static_cast<uint32_t>(i));
  
-        if (object.id != tag || object.object.element.score < tolerance_percent || !pros::AIVision::is_type(object, pros::AivisionDetectType::tag)) continue;
+        if (object.id != tag || !pros::AIVision::is_type(object, pros::AivisionDetectType::tag)) continue;
  
         // Shoelace formula for quadrilateral areas
         const double area = 0.5 * std::abs(
@@ -123,7 +125,8 @@ std::optional<AIVisionLocalizer::Pose> AIVisionLocalizer::getNearestRelative(con
         }
     }
  
-    return project(*best);
+    if (!best) return std::nullopt;
+    return std::optional<Pose>(project(*best));
 }
 
 /*
@@ -137,7 +140,7 @@ std::vector<AIVisionLocalizer::Pose> AIVisionLocalizer::getPositionsGlobal(const
     for (const Pose& relative : relative_poses) {
         Pose global;
         global.r = relative.r;
-        global.theta = std::fmod(relative.theta,2 * M_PI) + robot_pose[2];
+        global.theta = std::fmod(relative.theta + robot_pose[2], 2 * M_PI);
         global.x = robot_pose[0] + relative.r * std::cos(global.theta);
         global.y = robot_pose[1] + relative.r * std::sin(global.theta);
         global_poses.push_back(global);
